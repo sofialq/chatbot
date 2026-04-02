@@ -1,56 +1,75 @@
 import streamlit as st
 from openai import OpenAI
+import requests
+import base64
 
-# Show title and description.
-st.title("💬 Chatbot")
+# title and description.
+st.title("Image Captioning Bot")
 st.write(
-    "This is a simple chatbot that uses OpenAI's GPT-3.5 model to generate responses. "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
-    "You can also learn how to build this app step by step by [following our tutorial](https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps)."
+    "Provide the bot with either an image URL or file upload and let it write your captions for you!"
 )
 
-# Ask user for their OpenAI API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
-openai_api_key = st.text_input("OpenAI API Key", type="password")
-if not openai_api_key:
-    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
-else:
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-    # Create an OpenAI client.
-    client = OpenAI(api_key=openai_api_key)
+# initialize session state
+if "url_response" not in st.session_state:
+    st.session_state.url_response = None
 
-    # Create a session state variable to store the chat messages. This ensures that the
-    # messages persist across reruns.
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+if "upload_response" not in st.session_state:
+    st.session_state.upload_response = None
 
-    # Display the existing chat messages via `st.chat_message`.
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+st.subheader("Image URL Input")
+st.write("Input your image url here")
+url = st.text_input("Image URL")
 
-    # Create a chat input field to allow the user to enter a message. This will display
-    # automatically at the bottom of the page.
-    if prompt := st.chat_input("What is up?"):
+# button for api call
+if st.button("Generate Caption for Inputted URL"):
+    url_response = client.chat.completions.create(
+        model="gpt-4.1-mini",
+        max_tokens=1024,
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "image_url", "image_url": {"url": url, "detail": "auto"}},
+                {"type": "text", "text": "Describe the image in at least 3 sentences. Write five different captions for this image."
+                "Captions must vary in length, minimum one word but be no longer than 2 sentences."
+                "Captions should vary in tone, such as, but not limited to funny, intellectual, and aesthetic."}
+            ]
+        }]
+    )
+    st.session_state.url_response = url_response.choices[0].message.content
 
-        # Store and display the current prompt.
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+# write response
+if st.session_state.url_response:
+    st.image(url, use_container_width=True)
+    st.write(st.session_state.url_response)
 
-        # Generate a response using the OpenAI API.
-        stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages
-            ],
-            stream=True,
-        )
+st.subheader("Image Upload Input")
+st.write("Upload your image here")
 
-        # Stream the response to the chat using `st.write_stream`, then store it in 
-        # session state.
-        with st.chat_message("assistant"):
-            response = st.write_stream(stream)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+uploaded = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png", "webp", "gif"])
+
+if st.button("Generate Caption for Uploaded Image") and uploaded:
+    b64 = base64.b64encode(uploaded.read()).decode("utf-8")
+    mime = uploaded.type  # e.g. "image/png"
+    data_uri = f"data:{mime};base64,{b64}"
+
+    upload_response = client.chat.completions.create(
+        model="gpt-4.1-mini",
+        max_tokens=1024,
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "image_url", "image_url": {"url": data_uri, "detail": "low"}},
+                {"type": "text", "text": "Describe the image in at least 3 sentences. Write five different captions for this image."
+                "Captions must vary in length, minimum one word but be no longer than 2 sentences."
+                "Captions should vary in tone, such as, but not limited to funny, intellectual, and aesthetic."}
+            ]
+        }]
+    )
+    st.session_state.upload_response = upload_response.choices[0].message.content
+
+# write response
+if st.session_state.upload_response:
+    st.image(uploaded, use_container_width=True)
+    st.write(st.session_state.upload_response)
