@@ -21,6 +21,7 @@ if "upload_response" not in st.session_state:
 st.subheader("Image URL Input")
 st.write("Input your image url here")
 url = st.text_input("Image URL")
+st.caption("Ensure link leads directly to the image and not a webpage with images on it.")
 
 # button for api call
 if st.button("Generate Caption for Inputted URL"):
